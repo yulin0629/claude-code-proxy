@@ -81,6 +81,8 @@ app = FastAPI()
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_API_BASE = os.environ.get("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
 
 # Get preferred provider (default to openai)
 PREFERRED_PROVIDER = os.environ.get("PREFERRED_PROVIDER", "openai").lower()
@@ -202,25 +204,33 @@ class MessagesRequest(BaseModel):
             clean_v = clean_v[7:]
         elif clean_v.startswith('gemini/'):
             clean_v = clean_v[7:]
+        elif clean_v.startswith('openrouter/'):
+            clean_v = clean_v[11:]
 
         # --- Mapping Logic --- START ---
         mapped = False
         # Map Haiku to SMALL_MODEL based on provider preference
         if 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
-                new_model = f"gemini/{SMALL_MODEL}"
+            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
+                new_model = f"openrouter/{SMALL_MODEL.replace('openrouter/', '')}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
+                new_model = f"gemini/{SMALL_MODEL.replace('gemini/', '')}"
                 mapped = True
             else:
-                new_model = f"openai/{SMALL_MODEL}"
+                new_model = f"openai/{SMALL_MODEL.replace('openai/', '')}"
                 mapped = True
 
         # Map Sonnet to BIG_MODEL based on provider preference
         elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
-                new_model = f"gemini/{BIG_MODEL}"
+            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
+                new_model = f"openrouter/{BIG_MODEL.replace('openrouter/', '')}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
+                new_model = f"gemini/{BIG_MODEL.replace('gemini/', '')}"
                 mapped = True
             else:
-                new_model = f"openai/{BIG_MODEL}"
+                new_model = f"openai/{BIG_MODEL.replace('openai/', '')}"
                 mapped = True
 
         # Add prefixes to non-mapped models if they match known lists
@@ -237,7 +247,7 @@ class MessagesRequest(BaseModel):
             logger.debug(f"📌 MODEL MAPPING: '{original_model}' ➡️ '{new_model}'")
         else:
              # If no mapping occurred and no prefix exists, log warning or decide default
-             if not v.startswith(('openai/', 'gemini/', 'anthropic/')):
+             if not v.startswith(('openai/', 'gemini/', 'anthropic/', 'openrouter/')):
                  logger.warning(f"⚠️ No prefix or mapping rule for model: '{original_model}'. Using as is.")
              new_model = v # Ensure we return the original if no rule applied
 
@@ -260,7 +270,7 @@ class TokenCountRequest(BaseModel):
     @field_validator('model')
     def validate_model_token_count(cls, v, info): # Renamed to avoid conflict
         # Use the same logic as MessagesRequest validator
-        # NOTE: Pydantic validators might not share state easily if not class methods
+# NOTE: Pydantic validators might not share state easily if not class methods
         # Re-implementing the logic here for clarity, could be refactored
         original_model = v
         new_model = v # Default to original value
@@ -275,12 +285,17 @@ class TokenCountRequest(BaseModel):
             clean_v = clean_v[7:]
         elif clean_v.startswith('gemini/'):
             clean_v = clean_v[7:]
+        elif clean_v.startswith('openrouter/'):
+            clean_v = clean_v[11:]
 
         # --- Mapping Logic --- START ---
         mapped = False
         # Map Haiku to SMALL_MODEL based on provider preference
         if 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
+            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
+                new_model = f"openrouter/{SMALL_MODEL}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
                 new_model = f"gemini/{SMALL_MODEL}"
                 mapped = True
             else:
@@ -289,7 +304,10 @@ class TokenCountRequest(BaseModel):
 
         # Map Sonnet to BIG_MODEL based on provider preference
         elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
+            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
+                new_model = f"openrouter/{BIG_MODEL}"
+                mapped = True
+            elif PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
                 new_model = f"gemini/{BIG_MODEL}"
                 mapped = True
             else:
@@ -298,7 +316,10 @@ class TokenCountRequest(BaseModel):
 
         # Add prefixes to non-mapped models if they match known lists
         elif not mapped:
-            if clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
+            if clean_v in OPENROUTER_MODELS and not v.startswith('openrouter/'):
+                new_model = f"openrouter/{clean_v}"
+                mapped = True
+            elif clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
                 new_model = f"gemini/{clean_v}"
                 mapped = True # Technically mapped to add prefix
             elif clean_v in OPENAI_MODELS and not v.startswith('openai/'):
@@ -309,7 +330,7 @@ class TokenCountRequest(BaseModel):
         if mapped:
             logger.debug(f"📌 TOKEN COUNT MAPPING: '{original_model}' ➡️ '{new_model}'")
         else:
-             if not v.startswith(('openai/', 'gemini/', 'anthropic/')):
+             if not v.startswith(('openai/', 'gemini/', 'anthropic/', 'openrouter/')):
                  logger.warning(f"⚠️ No prefix or mapping rule for token count model: '{original_model}'. Using as is.")
              new_model = v # Ensure we return the original if no rule applied
 
@@ -1078,6 +1099,7 @@ async def create_message(
     request: MessagesRequest,
     raw_request: Request
 ):
+    litellm_request = None
     try:
         # print the body here
         body = await raw_request.body()
@@ -1110,6 +1132,11 @@ async def create_message(
         elif request.model.startswith("gemini/"):
             litellm_request["api_key"] = GEMINI_API_KEY
             logger.debug(f"Using Gemini API key for model: {request.model}")
+        elif request.model.startswith("openrouter/"):
+            litellm_request["api_key"] = OPENROUTER_API_KEY
+            litellm_request["api_base"] = OPENROUTER_API_BASE
+            logger.debug(f"Using OpenRouter API key for model: {request.model}")
+            
         else:
             litellm_request["api_key"] = ANTHROPIC_API_KEY
             logger.debug(f"Using Anthropic API key for model: {request.model}")
@@ -1306,13 +1333,50 @@ async def create_message(
         error_details = {
             "error": str(e),
             "type": type(e).__name__,
-            "traceback": error_traceback
+            "traceback": error_traceback,
+            # Add request details here
+            "request_info": {
+                "model": request.model if 'request' in locals() else "N/A",
+                "stream": request.stream if 'request' in locals() else "N/A",
+                "message_count": len(request.messages) if 'request' in locals() and request.messages else 0,
+                # Avoid logging full messages to prevent large logs and potential sensitive data exposure
+                "message_roles": [msg.role for msg in request.messages] if 'request' in locals() and request.messages else [],
+                "tool_count": len(request.tools) if 'request' in locals() and request.tools else 0,
+            },
+            # Optionally add parts of litellm_request, be careful with sensitive data like API keys
+            "litellm_request_info": {
+                 "model": litellm_request.get('model') if 'litellm_request' in locals() else "N/A",
+                 "stream": litellm_request.get('stream') if 'litellm_request' in locals() else "N/A",
+                 "message_count": len(litellm_request.get('messages', [])) if 'litellm_request' in locals() else 0,
+                 # Avoid logging full messages
+                 "message_roles": [msg.get('role') for msg in litellm_request.get('messages', [])] if 'litellm_request' in locals() else [],
+                 "tools": litellm_request.get('tools') if 'litellm_request' in locals() else "N/A",
+                 "tool_choice": litellm_request.get('tool_choice') if 'litellm_request' in locals() else "N/A",
+                 "tools_count": len(litellm_request.get('tools', [])) if 'litellm_request' in locals() else 0,
+                 # DO NOT log api_key or api_base directly
+            } if 'litellm_request' in locals() else "N/A" # Check if litellm_request was defined before error
         }
         
         # Check for LiteLLM-specific attributes
         for attr in ['message', 'status_code', 'response', 'llm_provider', 'model']:
             if hasattr(e, attr):
-                error_details[attr] = getattr(e, attr)
+                value = getattr(e, attr)
+                # 檢查值是否為 Response 物件或類似的不可序列化類型
+                if attr == 'response' and not isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                     # 將 response 物件轉換為字串或提取相關資訊
+                     try:
+                         # 嘗試獲取文本內容（如果可用）
+                         response_text = getattr(value, 'text', str(value))
+                         # 限制記錄的長度
+                         error_details[attr] = f"Response Object (Status: {getattr(value, 'status_code', 'N/A')}): {response_text[:500]}..."
+                     except Exception:
+                         error_details[attr] = f"Response Object: {str(value)}" # 回退到字串表示
+                elif isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                     # 對於其他屬性或可序列化的屬性，直接添加
+                     error_details[attr] = value
+                else:
+                     # 對於其他不可序列化的類型，轉換為字串
+                     error_details[attr] = str(value)
         
         # Check for additional exception details in dictionaries
         if hasattr(e, '__dict__'):
@@ -1321,14 +1385,18 @@ async def create_message(
                     error_details[key] = str(value)
         
         # Log all error details
-        logger.error(f"Error processing request: {json.dumps(error_details, indent=2)}")
+        logger.error(f"Error processing request: {json.dumps(error_details, indent=2, default=str)}")
         
         # Format error for response
         error_message = f"Error: {str(e)}"
         if 'message' in error_details and error_details['message']:
             error_message += f"\nMessage: {error_details['message']}"
         if 'response' in error_details and error_details['response']:
-            error_message += f"\nResponse: {error_details['response']}"
+            # 確保加入訊息的回應詳細資訊是字串
+             response_detail = error_details['response']
+             if not isinstance(response_detail, str):
+                 response_detail = str(response_detail) # 轉換為字串
+             error_message += f"\nResponse: {response_detail}"
         
         # Return detailed error
         status_code = error_details.get('status_code', 500)
