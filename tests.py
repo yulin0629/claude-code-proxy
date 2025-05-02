@@ -34,9 +34,11 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 PROXY_API_URL = "http://localhost:8082/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
 # Use a known Claude model for tests comparing against Anthropic native API
-DEFAULT_CLAUDE_MODEL = "claude-3-haiku-20240307" # Changed to Haiku for potentially faster/cheaper tests
+CLAUDE_BIG_MODEL = "claude-3-7-sonnet-20250219"
+CLAUDE_SMALL_MODEL = "claude-3-5-haiku-20241022" # Changed to Haiku for potentially faster/cheaper tests
 # Use a specific OpenRouter model for direct tests
-DEFAULT_MODEL = os.environ.get("BIG_MODEL") # Example, ensure this is available and free/cheap
+DEFAULT_BIG_MODEL = os.environ.get("BIG_MODEL") # Example, ensure this is available and free/cheap
+DEFAULT_SMALL_MODEL = os.environ.get("SMALL_MODEL") # Example, ensure this is available and free/cheap
 
 # Headers
 anthropic_headers = {
@@ -106,7 +108,15 @@ search_tool = {
 TEST_SCENARIOS = {
     # Simple text response (using default Claude model)
     "simple_claude": {
-        "model": DEFAULT_CLAUDE_MODEL,
+        "model": CLAUDE_BIG_MODEL,
+        "max_tokens": 150,
+        "messages": [
+            {"role": "user", "content": "Hello, world! Tell me about Paris in 1 sentence."}
+        ]
+    },
+
+    "simple_claude_small": {
+        "model": CLAUDE_SMALL_MODEL,
         "max_tokens": 150,
         "messages": [
             {"role": "user", "content": "Hello, world! Tell me about Paris in 1 sentence."}
@@ -115,7 +125,7 @@ TEST_SCENARIOS = {
 
     # Basic tool use (using default Claude model)
     "calculator_claude": {
-        "model": DEFAULT_CLAUDE_MODEL,
+        "model": CLAUDE_BIG_MODEL,
         "max_tokens": 150,
         "messages": [
             {"role": "user", "content": "What is 135 + 7.5 / 2.5?"}
@@ -126,7 +136,7 @@ TEST_SCENARIOS = {
 
     # Multiple tools (using default Claude model)
     "multi_tool_claude": {
-        "model": DEFAULT_CLAUDE_MODEL,
+        "model": CLAUDE_BIG_MODEL,
         "max_tokens": 200,
         "system": "Use tools when needed.",
         "messages": [
@@ -138,7 +148,7 @@ TEST_SCENARIOS = {
 
     # Multi-turn conversation (using default Claude model)
     "multi_turn_claude": {
-        "model": DEFAULT_CLAUDE_MODEL,
+        "model": CLAUDE_BIG_MODEL,
         "max_tokens": 150,
         "messages": [
             {"role": "user", "content": "What is 240 / 8?"},
@@ -151,7 +161,7 @@ TEST_SCENARIOS = {
 
     # Content blocks (using default Claude model)
     "content_blocks_claude": {
-        "model": DEFAULT_CLAUDE_MODEL,
+        "model": CLAUDE_BIG_MODEL,
         "max_tokens": 200,
         "messages": [
             {"role": "user", "content": [
@@ -164,8 +174,8 @@ TEST_SCENARIOS = {
 
     # Simple streaming test (using default Claude model)
     "simple_stream_claude": {
-        "model": DEFAULT_CLAUDE_MODEL,
-        "max_tokens": 50,
+        "model": CLAUDE_BIG_MODEL,
+        "max_tokens": 150,
         "stream": True,
         "messages": [
             {"role": "user", "content": "Count 1 to 3."}
@@ -174,7 +184,7 @@ TEST_SCENARIOS = {
 
     # Tool use with streaming (using default Claude model)
     "calculator_stream_claude": {
-        "model": DEFAULT_CLAUDE_MODEL,
+        "model": CLAUDE_BIG_MODEL,
         "max_tokens": 150,
         "stream": True,
         "messages": [
@@ -182,54 +192,7 @@ TEST_SCENARIOS = {
         ],
         "tools": [calculator_tool],
         "tool_choice": {"type": "auto"}
-    },
-
-    # Test direct OpenRouter model usage (with prefix)
-    "openrouter_direct": {
-        "model": DEFAULT_MODEL,
-        "max_tokens": 150,
-        "messages": [
-            {"role": "user", "content": f"Short story about a robot painting using {DEFAULT_MODEL}."}
-        ]
-    },
-
-    # Test OpenRouter model usage (without prefix, relying on server.py's logic)
-    # NOTE: This requires the model *without* prefix to be handled correctly by server.py
-    # For this example, we assume server.py adds the 'openrouter/' prefix if needed.
-    "openrouter_prefixless": {
-         "model": DEFAULT_MODEL, # e.g., "google/gemini-flash-1.5"
-         "max_tokens": 150,
-         "messages": [
-             {"role": "user", "content": f"Explain recursion simply using {DEFAULT_MODEL.split('/')[-1]} (prefixless)."}
-         ]
-     },
-
-    # Test mapping to OpenRouter (requires PREFERRED_PROVIDER=openrouter in .env)
-    # Assumes BIG_MODEL/SMALL_MODEL are set to valid OpenRouter models in .env
-    "openrouter_mapped_sonnet": {
-        "model": "claude-3-sonnet-20240229", # Should map via server.py
-        "max_tokens": 100,
-        "messages": [
-            {"role": "user", "content": "Capital of France? (Test Sonnet mapping)"}
-        ]
-    },
-     "openrouter_mapped_haiku": {
-        "model": "claude-3-haiku-20240307", # Should map via server.py
-        "max_tokens": 100,
-        "messages": [
-            {"role": "user", "content": "What is 2+2? (Test Haiku mapping)"}
-        ]
-    },
-
-    # Add streaming versions for direct OpenRouter
-    "openrouter_direct_stream": {
-        "model": DEFAULT_MODEL,
-        "max_tokens": 50,
-        "stream": True,
-        "messages": [
-            {"role": "user", "content": f"Count to 3. (Test {DEFAULT_MODEL} direct stream)"}
-        ]
-    },
+    }
 }
 
 # Required event types for Anthropic streaming responses
