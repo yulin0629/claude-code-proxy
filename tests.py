@@ -134,6 +134,16 @@ TEST_SCENARIOS = {
         "tool_choice": {"type": "auto"}
     },
 
+    "calculator_claude_small": {
+        "model": CLAUDE_SMALL_MODEL,
+        "max_tokens": 150,
+        "messages": [
+            {"role": "user", "content": "What is 135 + 7.5 / 2.5?"}
+        ],
+        "tools": [calculator_tool],
+        "tool_choice": {"type": "auto"}
+    },
+
     # Multiple tools (using default Claude model)
     "multi_tool_claude": {
         "model": CLAUDE_BIG_MODEL,
