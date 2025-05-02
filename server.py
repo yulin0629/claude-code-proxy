@@ -85,7 +85,7 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_API_BASE = os.environ.get("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
 
 # Get preferred provider (default to openai)
-PREFERRED_PROVIDER = os.environ.get("PREFERRED_PROVIDER", "openai").lower()
+PREFERRED_PROVIDER = os.environ.get("PREFERRED_PROVIDER", "").lower()
 
 # Get model mapping configuration from environment
 # Default to latest OpenAI models if not set
@@ -211,26 +211,26 @@ class MessagesRequest(BaseModel):
         mapped = False
         # Map Haiku to SMALL_MODEL based on provider preference
         if 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
-                new_model = f"openrouter/{SMALL_MODEL.replace('openrouter/', '')}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
+            if PREFERRED_PROVIDER == "google":
                 new_model = f"gemini/{SMALL_MODEL.replace('gemini/', '')}"
                 mapped = True
-            else:
+            elif PREFERRED_PROVIDER == "openai":
                 new_model = f"openai/{SMALL_MODEL.replace('openai/', '')}"
+                mapped = True
+            else:
+                new_model = SMALL_MODEL
                 mapped = True
 
         # Map Sonnet to BIG_MODEL based on provider preference
         elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
-                new_model = f"openrouter/{BIG_MODEL.replace('openrouter/', '')}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
+            if PREFERRED_PROVIDER == "google":
                 new_model = f"gemini/{BIG_MODEL.replace('gemini/', '')}"
                 mapped = True
-            else:
+            elif PREFERRED_PROVIDER == "openai":
                 new_model = f"openai/{BIG_MODEL.replace('openai/', '')}"
+                mapped = True
+            else:
+                new_model = BIG_MODEL
                 mapped = True
 
         # Add prefixes to non-mapped models if they match known lists
@@ -292,34 +292,31 @@ class TokenCountRequest(BaseModel):
         mapped = False
         # Map Haiku to SMALL_MODEL based on provider preference
         if 'haiku' in clean_v.lower():
-            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
-                new_model = f"openrouter/{SMALL_MODEL}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "google" and SMALL_MODEL in GEMINI_MODELS:
+            if PREFERRED_PROVIDER == "google":
                 new_model = f"gemini/{SMALL_MODEL}"
                 mapped = True
-            else:
+            elif PREFERRED_PROVIDER == "openai":
                 new_model = f"openai/{SMALL_MODEL}"
+                mapped = True
+            else:
+                new_model = SMALL_MODEL
                 mapped = True
 
         # Map Sonnet to BIG_MODEL based on provider preference
         elif 'sonnet' in clean_v.lower():
-            if PREFERRED_PROVIDER == "openrouter" and OPENROUTER_API_KEY:
-                new_model = f"openrouter/{BIG_MODEL}"
-                mapped = True
-            elif PREFERRED_PROVIDER == "google" and BIG_MODEL in GEMINI_MODELS:
+            if PREFERRED_PROVIDER == "google":
                 new_model = f"gemini/{BIG_MODEL}"
                 mapped = True
-            else:
+            elif PREFERRED_PROVIDER == "openai":
                 new_model = f"openai/{BIG_MODEL}"
+                mapped = True
+            else:
+                new_model = BIG_MODEL
                 mapped = True
 
         # Add prefixes to non-mapped models if they match known lists
         elif not mapped:
-            if clean_v in OPENROUTER_MODELS and not v.startswith('openrouter/'):
-                new_model = f"openrouter/{clean_v}"
-                mapped = True
-            elif clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
+            if clean_v in GEMINI_MODELS and not v.startswith('gemini/'):
                 new_model = f"gemini/{clean_v}"
                 mapped = True # Technically mapped to add prefix
             elif clean_v in OPENAI_MODELS and not v.startswith('openai/'):
@@ -1388,7 +1385,7 @@ async def create_message(
         logger.error(f"Error processing request: {json.dumps(error_details, indent=2, default=str)}")
         
         # Format error for response
-        error_message = f"Error: {str(e)}"
+        error_message = f"Model: {request.model}\nError: {str(e)}"
         if 'message' in error_details and error_details['message']:
             error_message += f"\nMessage: {error_details['message']}"
         if 'response' in error_details and error_details['response']:
